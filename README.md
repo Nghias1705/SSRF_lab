@@ -1,84 +1,98 @@
-# Social Networking Site - MERN Stack
+# SSRF_lab – MERN Stack Project
 
-Welcome to the **Social Networking Site** built using the **MERN Stack** (MongoDB, Express, React, Node.js). This project offers users the ability to connect with each other, share posts, like content, and more, similar to popular social networking platforms.
+## 📌 Giới thiệu
 
-![Website Screenshot](./frontend/public/images/screenshot.png)
+SSRF_lab là một dự án web sử dụng **MERN Stack**, phục vụ cho mục đích **học tập và nghiên cứu bảo mật**, đặc biệt là lỗ hổng **SSRF (Server-Side Request Forgery)**.
 
-## 🚀 Live Demo
+---
 
-Check out the live demo of the application [here](https://fb-mern.vercel.app/).
+## ⚙️ Yêu cầu môi trường
 
-## 📄 Description
+* **Node.js**: Cài bản v18.20.8
+* **npm** hoặc **yarn**
+* **MongoDB** (local hoặc MongoDB Atlas)
 
-This social networking site allows users to:
-- Create an account and log in.
-- Post updates, photos, and share content with their connections.
-- Like and comment on posts.
-- Edit their profiles and update personal information.
-- View and manage friend requests.
-- See real-time updates from other users on their feed.
+---
 
-## 🛠️ Tech Stack
+## 📂 Cấu trúc thư mục
 
-- **Frontend**: React.js with modern hooks and context for state management.
-- **Backend**: Node.js and Express.js.
-- **Database**: MongoDB for storing user data, posts, and comments.
-- **Authentication**: JWT (JSON Web Token) for secure user authentication.
-- **Hosting**: Vercel for deployment of the frontend and backend.
-  
-## 🔧 Features
+```
+SSRF_lab/
+├── backend/
+├── frontend/
+└── README.md
+```
 
-- User authentication (login, registration, password hashing).
-- Post creation, editing, and deletion.
-- Like and comment functionality.
-- Real-time feed updates.
-- Friend request system.
-- Profile management (edit user information, update profile picture).
-  
-## 🖥️ Setup Instructions
+---
 
-To run the project locally, follow these steps:
+## 🚀 Hướng dẫn cài đặt & chạy dự án
 
-1. **Clone the repository**:
-    ```bash
-    git clone https://github.com/rehmanNRY/SocialMediaApp
-    ```
+### 1️⃣ Tạo file môi trường (.env)
 
-2. **Install dependencies**:
-   - Navigate to both the frontend and backend directories and run:
-    ```bash
-    npm install
-    ```
+Trong thư mục `backend`, tạo file `.env` với nội dung sau:
 
-3. **Set up environment variables**:
-   - Create a `.env` file in the root directory of the backend and add the following:
-    ```env
-    MONGO_URI =
-    PORT =
-    CORS_ORIGIN=
-    JWT_SECRET=
+```env
+NEXT_PUBLIC_BACKEND_API=http://localhost:5000
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=very_secret_key_12345
+AUTH_SECRET=very_secret_key_12345
+GOOGLE_CLIENT_ID=dummy-id
+GOOGLE_CLIENT_SECRET=dummy-secret
+```
 
-    CLOUDINARY_CLOUD_NAME=
-    CLOUDINARY_API_KEY=
-    CLOUDINARY_API_SECRET=
-    ```
+> ⚠️ **Lưu ý bảo mật**
+> Không commit file `.env` lên GitHub. Hãy đảm bảo file này đã được thêm vào `.gitignore`.
 
-4. **Start the development server**:
-   - Run the backend server:
-    ```bash
-    npm run dev
-    ```
-   - Run the frontend React application:
-    ```bash
-    npm run dev
-    ```
+---
 
-5. **Access the app**: 
-   - Open your browser and go to `http://localhost:3000` for the frontend and `http://localhost:<Backend Port>` for the backend.
+### 2️⃣ Cài đặt dependencies
 
-## 👨‍💻 Developer
+Lần lượt cài đặt các package cho **backend** và **frontend**:
 
-**Rehman**  
-[LinkedIn](https://www.linkedin.com/posts/rehman-nry_finally-completed-that-project-hey-everyone-activity-7242780752663265281-CWtB?utm_source=share&utm_medium=member_desktop)
+```bash
+cd backend
+npm install
 
-Feel free to check out the live demo and connect with me on LinkedIn!
+cd ../frontend
+npm install
+```
+
+---
+
+### 3️⃣ Chạy dự án
+
+Sau khi cài đặt xong, chạy lệnh sau để khởi động dự án:
+
+```bash
+npm run dev
+```
+
+* Backend chạy tại: **[http://localhost:5000](http://localhost:5000)**
+* Frontend chạy tại: **[http://localhost:3000](http://localhost:3000)**
+
+---
+
+### 4️⃣ Tạo dữ liệu mẫu cho Database
+
+Trong thư mục `backend`, chạy lệnh sau để tạo **user mẫu** trong database:
+
+```bash
+npm run seed
+```
+
+---
+
+## 🧪 Mục đích sử dụng
+
+* Học tập và nghiên cứu lỗ hổng **SSRF**
+* Phân tích mã nguồn Backend / Frontend
+* Phục vụ bài tập môn học, lab hoặc CTF
+
+---
+
+## 📎 Ghi chú
+
+* Dự án chỉ phục vụ **mục đích học tập**, không khuyến nghị dùng trong môi trường production.
+* Có thể mở rộng để thực hành các kỹ thuật bảo mật Web khác.
+
+---
