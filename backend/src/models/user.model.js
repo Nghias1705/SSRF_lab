@@ -43,7 +43,9 @@ const UserSchema = new Schema({
     type: String,
     default: 'https://img.freepik.com/free-psd/3d-illustration-human-avatar-profile_23-2150671142.jpg',
     validate: {
-      validator: validator.isURL,
+      validator: function(v) {
+        return validator.isURL(v, { require_tld: false }) || v.startsWith('data:image/');
+      },
       message: 'Invalid URL format for profile picture',
     },
   },
@@ -51,7 +53,9 @@ const UserSchema = new Schema({
     type: String,
     default: 'https://ih1.redbubble.net/cover.4093136.2400x600.jpg',
     validate: {
-      validator: validator.isURL,
+      validator: function(v) {
+        return validator.isURL(v, { require_tld: false }) || v.startsWith('data:image/');
+      },
       message: 'Invalid URL format for cover image',
     },
   },

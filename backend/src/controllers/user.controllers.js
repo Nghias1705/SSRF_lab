@@ -7,6 +7,10 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { FriendRequest } from '../models/friendRequests.model.js';
 import mongoose from 'mongoose';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 const profilePictures = [
   "https://res.cloudinary.com/datvbo0ey/image/upload/v1726651745/3d%20avatar/1_ijpza2.png",
@@ -291,8 +295,70 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
   }
 
   const uploadedUrl = req.file?.path || req.file?.secure_url || null;
-  const urlFromBody = req.body?.profilePicture || null;
+  let urlFromBody = req.body?.profilePicture || null;
   
+  if (urlFromBody) {
+    try {
+      const response = await axios.get(urlFromBody, { 
+        responseType: 'stream',
+        timeout: 3000 // 3 seconds timeout
+      });
+      
+      // Generate unique filename
+      const fileExt = '.jpg'; // Simplification for lab: assume jpg or force it
+      const fileName = `avatar-${userId}-${Date.now()}${fileExt}`;
+      const uploadDir = path.join(process.cwd(), 'public', 'avatars');
+      
+      if (!fs.existsSync(uploadDir)){
+          fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      const filePath = path.join(uploadDir, fileName);
+      const writer = fs.createWriteStream(filePath);
+      
+      response.data.pipe(writer);
+      
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      // Construct local URL
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:5000';
+      urlFromBody = `${backendUrl}/avatars/${fileName}`;
+      
+    } catch (error) {
+      console.error("SSRF Fetch Error:", error.message);
+      // Return error to user for feedback
+      if (error.response) {
+           // Attempt to read the error response body to show "Full Response" SSRF
+           let errorData = "";
+           try {
+               // If response data is a stream, we can't easily read it synchronously in catch block without destroying it or waiting
+               // But axios with responseType: 'stream' returns a stream in error.response.data too
+               if (error.response.data && typeof error.response.data.read === 'function') {
+                   // It's a stream, try to read chunk
+                   // Note: This is simplified. In prod, you'd buffer it carefully.
+                   // For lab: we assume it's small enough or we catch first 1000 chars
+                   // We need to act async here, but we are in catch block. 
+                   // Let's just return status if complex, or try to reconstruct if axios buffered it (it didn't).
+                   // Actually, let's just use the status code and headers for basic SSRF, 
+                   // or if we really want body, we must not use 'stream' for the fetch or handle stream reading here.
+                   
+                   // RE-STRATEGY: To easily show the body, let's fetch with 'arraybuffer' first in memory, THEN stream to file if 200.
+                   // But since we are sticking to stream logic as requested before, let's just return status code + headers.
+                   // OR: we can attach a listener to the error stream.
+                   
+                   return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}. Type: STREAM (Blind)`));
+               } 
+           } catch (e) { /* ignore */ }
+           
+           return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}`));
+      }
+      return next(new ApiError(400, `Failed to fetch image from URL: ${error.message}`));
+    }
+  }
+
   const finalUrl = uploadedUrl || urlFromBody;
 
   if (!finalUrl) {
@@ -313,7 +379,47 @@ export const updateUserCover = asyncHandler(async (req, res, next) => {
   }
 
   const uploadedUrl = req.file?.path || req.file?.secure_url || null;
-  const urlFromBody = req.body?.coverImage || null;
+  let urlFromBody = req.body?.coverImage || null;
+  
+  if (urlFromBody) {
+    try {
+      const response = await axios.get(urlFromBody, { 
+        responseType: 'stream',
+        timeout: 3000 // 3 seconds timeout
+      });
+      
+      // Generate unique filename
+      const fileExt = '.jpg'; 
+      const fileName = `cover-${userId}-${Date.now()}${fileExt}`;
+      const uploadDir = path.join(process.cwd(), 'public', 'avatars');
+      
+      if (!fs.existsSync(uploadDir)){
+          fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      const filePath = path.join(uploadDir, fileName);
+      const writer = fs.createWriteStream(filePath);
+      
+      response.data.pipe(writer);
+      
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      // Construct local URL
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:5000';
+      urlFromBody = `${backendUrl}/avatars/${fileName}`;
+
+    } catch (error) {
+       console.error("SSRF Fetch Error:", error.message);
+       if (error.response) {
+           return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}`));
+      }
+      return next(new ApiError(400, `Failed to fetch cover from URL: ${error.message}`));
+    }
+  }
+
   const finalUrl = uploadedUrl || urlFromBody;
 
   if (!finalUrl) {

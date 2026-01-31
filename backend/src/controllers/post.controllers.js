@@ -1,5 +1,12 @@
 // post.controller.js
 import { Post } from '../models/post.model.js';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
@@ -23,8 +30,51 @@ export const createPost = asyncHandler(async (req, res, next) => {
     }
 
     // Prefer uploaded file (Cloudinary) over URL when both are present
+    // Prefer uploaded file (Cloudinary) over URL when both are present
     const uploadedImageUrl = req.file?.path || req.file?.secure_url || null;
-    const image = uploadedImageUrl || (req.body.image ? req.body.image : null);
+    let image = uploadedImageUrl;
+
+    // SSRF VULNERABILITY: Fetch the URL provided by the user
+    if (!image && req.body.image) {
+      try {
+        const targetUrl = req.body.image;
+        console.log(`[SSRF] Fetching URL: ${targetUrl}`);
+        
+        // VULNERABLE CODE: requesting arbitrary URL from server side
+        const response = await axios.get(targetUrl, { 
+          responseType: 'arraybuffer',
+          timeout: 5000 // 5s timeout
+        });
+
+        // Generate filename and save locally (Option B)
+        // FORCE .jpg extension even if content is text (Simulate Polyglot/Misconfiguration)
+        const timestamp = Date.now();
+        // const extension = response.headers['content-type']?.split('/')[1] || 'bin'; 
+        const extension = 'jpg'; // Vulnerable Logic: Trusting it is an image or forcing it
+        const filename = `ssrf_${timestamp}.${extension}`;
+        
+        // Ensure directory exists
+        const uploadDir = path.join(__dirname, '../../public/uploads'); 
+        // NOTE: __dirname is src/controllers, so ../../public/uploads targets backend/public/uploads
+        if (!fs.existsSync(uploadDir)){
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const filePath = path.join(uploadDir, filename);
+        fs.writeFileSync(filePath, response.data);
+        
+        console.log(`[SSRF] File saved to: ${filePath}`);
+
+        // Set image URL to the local static path
+        // Assuming server serves 'public' folder at root
+        image = `/uploads/${filename}`;
+        
+      } catch (error) {
+        console.error(`[SSRF] Error fetching URL: ${error.message}`);
+        // Fallback: use the URL as is if fetch fails (or you could throw error to leak info)
+        image = req.body.image;
+      }
+    }
 
     // Create post object with basic fields
     const postData = { 
@@ -137,6 +187,42 @@ export const editPost = asyncHandler(async (req, res, next) => {
   const post = await Post.findOne({ _id: postId, user: userId });
   if (!post) {
     return next(new ApiError(404, 'Post not found or you are not authorized to edit this post'));
+  }
+
+  // SSRF VULNERABILITY in Edit: Fetch the URL provided by the user
+  if (image && (image.startsWith('http://') || image.startsWith('https://'))) {
+      try {
+        const targetUrl = image;
+        console.log(`[SSRF Edit] Fetching URL: ${targetUrl}`);
+        const response = await axios.get(targetUrl, { 
+          responseType: 'arraybuffer',
+          timeout: 5000 
+        });
+        
+        // Generate filename and save locally (Option B)
+        const timestamp = Date.now();
+        // const extension = response.headers['content-type']?.split('/')[1] || 'bin';
+        const extension = 'jpg'; // Vulnerable Logic
+        const filename = `ssrf_edit_${timestamp}.${extension}`;
+        
+        // Ensure directory exists
+        const uploadDir = path.join(__dirname, '../../public/uploads'); 
+        if (!fs.existsSync(uploadDir)){
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const filePath = path.join(uploadDir, filename);
+        fs.writeFileSync(filePath, response.data);
+        
+        console.log(`[SSRF Edit] File saved to: ${filePath}`);
+
+        // Set image URL to the local static path
+        image = `/uploads/${filename}`;
+
+      } catch (error) {
+        console.error(`[SSRF Edit] Error fetching URL: ${error.message}`);
+        // Fallback to original URL
+      }
   }
 
   // Update the post
