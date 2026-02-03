@@ -329,33 +329,38 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
       
     } catch (error) {
       console.error("SSRF Fetch Error:", error.message);
-      // Return error to user for feedback
+      
+      // Enhanced error handling for SSRF demo - helps with port scanning
       if (error.response) {
-           // Attempt to read the error response body to show "Full Response" SSRF
-           let errorData = "";
-           try {
-               // If response data is a stream, we can't easily read it synchronously in catch block without destroying it or waiting
-               // But axios with responseType: 'stream' returns a stream in error.response.data too
-               if (error.response.data && typeof error.response.data.read === 'function') {
-                   // It's a stream, try to read chunk
-                   // Note: This is simplified. In prod, you'd buffer it carefully.
-                   // For lab: we assume it's small enough or we catch first 1000 chars
-                   // We need to act async here, but we are in catch block. 
-                   // Let's just return status if complex, or try to reconstruct if axios buffered it (it didn't).
-                   // Actually, let's just use the status code and headers for basic SSRF, 
-                   // or if we really want body, we must not use 'stream' for the fetch or handle stream reading here.
-                   
-                   // RE-STRATEGY: To easily show the body, let's fetch with 'arraybuffer' first in memory, THEN stream to file if 200.
-                   // But since we are sticking to stream logic as requested before, let's just return status code + headers.
-                   // OR: we can attach a listener to the error stream.
-                   
-                   return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}. Type: STREAM (Blind)`));
-               } 
-           } catch (e) { /* ignore */ }
-           
-           return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}`));
+        // Server responded with error status (port is OPEN, service running)
+        const status = error.response.status;
+        const statusText = error.response.statusText || 'Unknown';
+        return next(new ApiError(400, `[SSRF] Target responded: HTTP ${status} ${statusText} - Port OPEN`));
       }
-      return next(new ApiError(400, `Failed to fetch image from URL: ${error.message}`));
+      
+      // Network-level errors (useful for port scanning)
+      if (error.code === 'ECONNREFUSED') {
+        return next(new ApiError(400, `[SSRF] Connection refused - Port CLOSED or service not running`));
+      }
+      
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        return next(new ApiError(400, `[SSRF] Connection timeout - Port FILTERED or host unreachable`));
+      }
+      
+      if (error.code === 'ENOTFOUND') {
+        return next(new ApiError(400, `[SSRF] DNS lookup failed - Host not found`));
+      }
+      
+      if (error.code === 'ENETUNREACH') {
+        return next(new ApiError(400, `[SSRF] Network unreachable - Cannot route to host`));
+      }
+      
+      if (error.code === 'EHOSTUNREACH') {
+        return next(new ApiError(400, `[SSRF] Host unreachable - No route to host`));
+      }
+      
+      // Generic fallback with full error message
+      return next(new ApiError(400, `[SSRF] Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
     }
   }
 
@@ -412,11 +417,36 @@ export const updateUserCover = asyncHandler(async (req, res, next) => {
       urlFromBody = `${backendUrl}/avatars/${fileName}`;
 
     } catch (error) {
-       console.error("SSRF Fetch Error:", error.message);
-       if (error.response) {
-           return next(new ApiError(400, `Failed to fetch from URL. Status: ${error.response.status}`));
+      console.error("SSRF Fetch Error:", error.message);
+      
+      // Enhanced error handling for SSRF demo - helps with port scanning
+      if (error.response) {
+        const status = error.response.status;
+        const statusText = error.response.statusText || 'Unknown';
+        return next(new ApiError(400, `[SSRF] Target responded: HTTP ${status} ${statusText} - Port OPEN`));
       }
-      return next(new ApiError(400, `Failed to fetch cover from URL: ${error.message}`));
+      
+      if (error.code === 'ECONNREFUSED') {
+        return next(new ApiError(400, `[SSRF] Connection refused - Port CLOSED or service not running`));
+      }
+      
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        return next(new ApiError(400, `[SSRF] Connection timeout - Port FILTERED or host unreachable`));
+      }
+      
+      if (error.code === 'ENOTFOUND') {
+        return next(new ApiError(400, `[SSRF] DNS lookup failed - Host not found`));
+      }
+      
+      if (error.code === 'ENETUNREACH') {
+        return next(new ApiError(400, `[SSRF] Network unreachable - Cannot route to host`));
+      }
+      
+      if (error.code === 'EHOSTUNREACH') {
+        return next(new ApiError(400, `[SSRF] Host unreachable - No route to host`));
+      }
+      
+      return next(new ApiError(400, `[SSRF] Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
     }
   }
 

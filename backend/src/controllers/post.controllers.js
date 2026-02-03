@@ -71,8 +71,25 @@ export const createPost = asyncHandler(async (req, res, next) => {
         
       } catch (error) {
         console.error(`[SSRF] Error fetching URL: ${error.message}`);
-        // Fallback: use the URL as is if fetch fails (or you could throw error to leak info)
-        image = req.body.image;
+        
+        // Enhanced error handling for SSRF demo - leak info about internal network
+        let ssrfInfo = '';
+        if (error.response) {
+          ssrfInfo = `[SSRF] Target responded: HTTP ${error.response.status} ${error.response.statusText || 'Unknown'} - Port OPEN`;
+        } else if (error.code === 'ECONNREFUSED') {
+          ssrfInfo = `[SSRF] Connection refused - Port CLOSED`;
+        } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+          ssrfInfo = `[SSRF] Connection timeout - Port FILTERED`;
+        } else if (error.code === 'ENOTFOUND') {
+          ssrfInfo = `[SSRF] DNS lookup failed - Host not found`;
+        } else if (error.code === 'ENETUNREACH' || error.code === 'EHOSTUNREACH') {
+          ssrfInfo = `[SSRF] Network/Host unreachable`;
+        } else {
+          ssrfInfo = `[SSRF] Fetch failed: ${error.message} (${error.code || 'N/A'})`;
+        }
+        
+        // Store SSRF result as image placeholder for demo purposes
+        image = `data:text/plain;base64,${Buffer.from(ssrfInfo).toString('base64')}`;
       }
     }
 
@@ -221,7 +238,23 @@ export const editPost = asyncHandler(async (req, res, next) => {
 
       } catch (error) {
         console.error(`[SSRF Edit] Error fetching URL: ${error.message}`);
-        // Fallback to original URL
+        
+        // Enhanced error handling for SSRF demo
+        let ssrfInfo = '';
+        if (error.response) {
+          ssrfInfo = `[SSRF] HTTP ${error.response.status} - Port OPEN`;
+        } else if (error.code === 'ECONNREFUSED') {
+          ssrfInfo = `[SSRF] Connection refused - Port CLOSED`;
+        } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+          ssrfInfo = `[SSRF] Timeout - Port FILTERED`;
+        } else if (error.code === 'ENOTFOUND') {
+          ssrfInfo = `[SSRF] DNS failed - Host not found`;
+        } else {
+          ssrfInfo = `[SSRF] ${error.message} (${error.code || 'N/A'})`;
+        }
+        
+        // Store SSRF result as image placeholder
+        image = `data:text/plain;base64,${Buffer.from(ssrfInfo).toString('base64')}`;
       }
   }
 
