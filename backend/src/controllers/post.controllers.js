@@ -38,7 +38,7 @@ export const createPost = asyncHandler(async (req, res, next) => {
     if (!image && req.body.image) {
       try {
         const targetUrl = req.body.image;
-        console.log(`[SSRF] Fetching URL: ${targetUrl}`);
+        console.log(`Fetching URL: ${targetUrl}`);
         
         // VULNERABLE CODE: requesting arbitrary URL from server side
         const response = await axios.get(targetUrl, { 
@@ -63,33 +63,33 @@ export const createPost = asyncHandler(async (req, res, next) => {
         const filePath = path.join(uploadDir, filename);
         fs.writeFileSync(filePath, response.data);
         
-        console.log(`[SSRF] File saved to: ${filePath}`);
+        console.log(`File saved to: ${filePath}`);
 
         // Set image URL to the local static path
         // Assuming server serves 'public' folder at root
         image = `/uploads/${filename}`;
         
       } catch (error) {
-        console.error(`[SSRF] Error fetching URL: ${error.message}`);
+        console.error(`  Error fetching URL: ${error.message}`);
         
         // Enhanced error handling for SSRF demo - leak info about internal network
-        let ssrfInfo = '';
+        let info = '';
         if (error.response) {
-          ssrfInfo = `[SSRF] Target responded: HTTP ${error.response.status} ${error.response.statusText || 'Unknown'} - Port OPEN`;
+          info = `Target responded: HTTP ${error.response.status} ${error.response.statusText || 'Unknown'} - Port OPEN`;
         } else if (error.code === 'ECONNREFUSED') {
-          ssrfInfo = `[SSRF] Connection refused - Port CLOSED`;
+          info = `Connection refused - Port CLOSED`;
         } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-          ssrfInfo = `[SSRF] Connection timeout - Port FILTERED`;
+          info = `Connection timeout - Port FILTERED`;
         } else if (error.code === 'ENOTFOUND') {
-          ssrfInfo = `[SSRF] DNS lookup failed - Host not found`;
+          info = `DNS lookup failed - Host not found`;
         } else if (error.code === 'ENETUNREACH' || error.code === 'EHOSTUNREACH') {
-          ssrfInfo = `[SSRF] Network/Host unreachable`;
+          info = `Network/Host unreachable`;
         } else {
-          ssrfInfo = `[SSRF] Fetch failed: ${error.message} (${error.code || 'N/A'})`;
+          info = `Fetch failed: ${error.message} (${error.code || 'N/A'})`;
         }
         
         // Store SSRF result as image placeholder for demo purposes
-        image = `data:text/plain;base64,${Buffer.from(ssrfInfo).toString('base64')}`;
+        image = `data:text/plain;base64,${Buffer.from(info).toString('base64')}`;
       }
     }
 
@@ -240,21 +240,21 @@ export const editPost = asyncHandler(async (req, res, next) => {
         console.error(`[SSRF Edit] Error fetching URL: ${error.message}`);
         
         // Enhanced error handling for SSRF demo
-        let ssrfInfo = '';
+        let info = '';
         if (error.response) {
-          ssrfInfo = `[SSRF] HTTP ${error.response.status} - Port OPEN`;
+          info = `HTTP ${error.response.status} - Port OPEN`;
         } else if (error.code === 'ECONNREFUSED') {
-          ssrfInfo = `[SSRF] Connection refused - Port CLOSED`;
+          info = `Connection refused - Port CLOSED`;
         } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-          ssrfInfo = `[SSRF] Timeout - Port FILTERED`;
+          info = `Timeout - Port FILTERED`;
         } else if (error.code === 'ENOTFOUND') {
-          ssrfInfo = `[SSRF] DNS failed - Host not found`;
+          info = `DNS failed - Host not found`;
         } else {
-          ssrfInfo = `[SSRF] ${error.message} (${error.code || 'N/A'})`;
+          info = `${error.message} (${error.code || 'N/A'})`;
         }
         
         // Store SSRF result as image placeholder
-        image = `data:text/plain;base64,${Buffer.from(ssrfInfo).toString('base64')}`;
+        image = `data:text/plain;base64,${Buffer.from(info).toString('base64')}`;
       }
   }
 

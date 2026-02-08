@@ -173,3 +173,7 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node,nextjs
+
+# Uploaded images in backend
+backend/public/avatars/*
+!backend/public/avatars/.gitkeep

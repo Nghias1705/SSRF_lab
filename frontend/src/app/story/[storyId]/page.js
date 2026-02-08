@@ -209,7 +209,7 @@ const Page = ({ params }) => {
                 alt="Logo"
                 className="w-10 mr-2"
               />
-              <span className="font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent text-xl">Nhóm 15</span>
+              <span className="font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent text-xl">Nhóm 01</span>
             </Link>
           </div>
 

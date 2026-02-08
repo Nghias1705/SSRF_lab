@@ -301,7 +301,7 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
     try {
       const response = await axios.get(urlFromBody, { 
         responseType: 'stream',
-        timeout: 3000 // 3 seconds timeout
+        // timeout: 3000 // 3 seconds timeout
       });
       
       // Generate unique filename
@@ -328,39 +328,39 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
       urlFromBody = `${backendUrl}/avatars/${fileName}`;
       
     } catch (error) {
-      console.error("SSRF Fetch Error:", error.message);
+      console.error("Fetch Error:", error.message);
       
-      // Enhanced error handling for SSRF demo - helps with port scanning
+      // Enhanced error handling for   demo - helps with port scanning
       if (error.response) {
         // Server responded with error status (port is OPEN, service running)
         const status = error.response.status;
         const statusText = error.response.statusText || 'Unknown';
-        return next(new ApiError(400, `[SSRF] Target responded: HTTP ${status} ${statusText} - Port OPEN`));
+        return next(new ApiError(400, `Target responded: HTTP ${status} ${statusText} - Port OPEN`));
       }
-      
+      return next(new ApiError(400, error.message));
       // Network-level errors (useful for port scanning)
-      if (error.code === 'ECONNREFUSED') {
-        return next(new ApiError(400, `[SSRF] Connection refused - Port CLOSED or service not running`));
-      }
+      // if (error.code === 'ECONNREFUSED') {
+      //   return next(new ApiError(400, `Connection refused - Port CLOSED or service not running`));
+      // }
       
-      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-        return next(new ApiError(400, `[SSRF] Connection timeout - Port FILTERED or host unreachable`));
-      }
+      // if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+      //   return next(new ApiError(400, `   Connection timeout - Port FILTERED or host unreachable`));
+      // }
       
-      if (error.code === 'ENOTFOUND') {
-        return next(new ApiError(400, `[SSRF] DNS lookup failed - Host not found`));
-      }
+      // if (error.code === 'ENOTFOUND') {
+      //   return next(new ApiError(400, `   DNS lookup failed - Host not found`));
+      // }
       
-      if (error.code === 'ENETUNREACH') {
-        return next(new ApiError(400, `[SSRF] Network unreachable - Cannot route to host`));
-      }
+      // if (error.code === 'ENETUNREACH') {
+      //   return next(new ApiError(400, `   Network unreachable - Cannot route to host`));
+      // }
       
-      if (error.code === 'EHOSTUNREACH') {
-        return next(new ApiError(400, `[SSRF] Host unreachable - No route to host`));
-      }
+      // if (error.code === 'EHOSTUNREACH') {
+      //   return next(new ApiError(400, `  Host unreachable - No route to host`));
+      // }
       
       // Generic fallback with full error message
-      return next(new ApiError(400, `[SSRF] Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
+      return next(new ApiError(400, `  Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
     }
   }
 
@@ -417,36 +417,36 @@ export const updateUserCover = asyncHandler(async (req, res, next) => {
       urlFromBody = `${backendUrl}/avatars/${fileName}`;
 
     } catch (error) {
-      console.error("SSRF Fetch Error:", error.message);
+      console.error("  Fetch Error:", error.message);
       
-      // Enhanced error handling for SSRF demo - helps with port scanning
+      // Enhanced error handling for   demo - helps with port scanning
       if (error.response) {
         const status = error.response.status;
         const statusText = error.response.statusText || 'Unknown';
-        return next(new ApiError(400, `[SSRF] Target responded: HTTP ${status} ${statusText} - Port OPEN`));
+        return next(new ApiError(400, `  Target responded: HTTP ${status} ${statusText} - Port OPEN`));
       }
       
       if (error.code === 'ECONNREFUSED') {
-        return next(new ApiError(400, `[SSRF] Connection refused - Port CLOSED or service not running`));
+        return next(new ApiError(400, `  Connection refused - Port CLOSED or service not running`));
       }
       
       if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-        return next(new ApiError(400, `[SSRF] Connection timeout - Port FILTERED or host unreachable`));
+        return next(new ApiError(400, `  Connection timeout - Port FILTERED or host unreachable`));
       }
       
       if (error.code === 'ENOTFOUND') {
-        return next(new ApiError(400, `[SSRF] DNS lookup failed - Host not found`));
+        return next(new ApiError(400, `  DNS lookup failed - Host not found`));
       }
       
       if (error.code === 'ENETUNREACH') {
-        return next(new ApiError(400, `[SSRF] Network unreachable - Cannot route to host`));
+        return next(new ApiError(400, `  Network unreachable - Cannot route to host`));
       }
       
       if (error.code === 'EHOSTUNREACH') {
-        return next(new ApiError(400, `[SSRF] Host unreachable - No route to host`));
+        return next(new ApiError(400, `  Host unreachable - No route to host`));
       }
       
-      return next(new ApiError(400, `[SSRF] Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
+      return next(new ApiError(400, `  Fetch failed: ${error.message} (Code: ${error.code || 'N/A'})`));
     }
   }
 
