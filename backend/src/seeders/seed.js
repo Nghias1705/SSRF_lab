@@ -42,6 +42,7 @@ const seedDatabase = async () => {
           "https://phongthe.edu.vn/upload/2025/08/avatar-chibi-nam-001.webp",
         coverImage:
           "https://t3.ftcdn.net/jpg/05/38/74/02/360_F_538740200_HNOc2ABQarAJshNsLB4c3DXAuiCLl2QI.jpg",
+        isDpVerify: true,
       },
       {
         username: "ThanhNguyenVan",
@@ -56,6 +57,7 @@ const seedDatabase = async () => {
           "https://phongthe.edu.vn/upload/2025/08/avatar-chibi-nam-003.webp",
         coverImage:
           "https://t4.ftcdn.net/jpg/05/34/78/37/360_F_534783787_w337He2LnkNIgJ0J26y6CYZpmios8aUk.jpg",
+        isDpVerify: true,
       },
       {
         username: "HungNguyenDoan",
@@ -70,6 +72,7 @@ const seedDatabase = async () => {
           "https://anhavatardep.com/wp-content/uploads/2025/05/avatar-cute-12.jpg",
         coverImage:
           "https://img.freepik.com/free-photo/light-background-with-sunset-projector-lamp_53876-128374.jpg",
+        isDpVerify: true,
       },
       {
         username: "ThaiTruongQuoc",
@@ -84,6 +87,7 @@ const seedDatabase = async () => {
           "https://anhavatardep.com/wp-content/uploads/2025/05/avatar-cute-13.jpg",
         coverImage:
           "https://img.freepik.com/free-photo/light-background-with-sunset-projector-lamp_53876-128374.jpg",
+        isDpVerify: true,
       },
       {
         username: "ThaoNgoXuan",
@@ -98,6 +102,7 @@ const seedDatabase = async () => {
           "https://anhavatardep.com/wp-content/uploads/2025/05/avatar-cute-11.jpg",
         coverImage:
           "https://img.freepik.com/free-photo/light-background-with-sunset-projector-lamp_53876-128374.jpg",
+        isDpVerify: true,
       },
     ];
 
