@@ -325,55 +325,41 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
-
   const uploadedUrl = req.file?.path || req.file?.secure_url || null;
   let urlFromBody = req.body?.profilePicture || null;
-
   if (urlFromBody) {
     try {
       const response = await axios.get(urlFromBody, {
         responseType: "stream",
-        // timeout: 3000 // 3 seconds timeout
       });
-
-      // Generate unique filename
-      const fileExt = ".jpg"; // Simplification for lab: assume jpg or force it
+      const fileExt = ".jpg";
       const fileName = `avatar-${userId}-${Date.now()}${fileExt}`;
       const uploadDir = path.join(process.cwd(), "public", "avatars");
-
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-
       const filePath = path.join(uploadDir, fileName);
       const writer = fs.createWriteStream(filePath);
-
       response.data.pipe(writer);
-
       await new Promise((resolve, reject) => {
         writer.on("finish", resolve);
         writer.on("error", reject);
       });
-
-      // Construct relative URL (resolved by browser against current domain)
       urlFromBody = `/avatars/${fileName}`;
     } catch (error) {
       console.error("Fetch Error:", error.message);
-      if (error.response) {
-        const status = error.response.status;
-        const statusText = error.response.statusText || "Unknown";
-        return res.status(400).send(`${status} ${statusText}`);
-      }
+      // if (error.response) {
+      //   const status = error.response.status;
+      //   const statusText = error.response.statusText || "Unknown";
+      //   return res.status(400).send(`${status} ${statusText}`);
+      // }
       return res.status(400).send(`${error.message}`);
     }
   }
-
   const finalUrl = uploadedUrl || urlFromBody;
-
   if (!finalUrl) {
     return next(new ApiError(400, "No image provided"));
   }
-
   user.profilePicture = finalUrl;
   await user.save();
   return res
