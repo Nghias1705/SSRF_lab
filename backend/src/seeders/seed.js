@@ -39,7 +39,7 @@ const seedDatabase = async () => {
         location: "Hanoi, Vietnam",
         dob: new Date("1995-01-01"),
         profilePicture:
-          "https://phongthe.edu.vn/upload/2025/08/avatar-chibi-nam-001.webp",
+          "https://anhavatardep.com/wp-content/uploads/2025/05/avatar-cute-13.jpg",
         coverImage:
           "https://t3.ftcdn.net/jpg/05/38/74/02/360_F_538740200_HNOc2ABQarAJshNsLB4c3DXAuiCLl2QI.jpg",
         isDpVerify: true,
@@ -84,7 +84,7 @@ const seedDatabase = async () => {
         location: "Can Tho, Vietnam",
         dob: new Date("1997-07-20"),
         profilePicture:
-          "https://anhavatardep.com/wp-content/uploads/2025/05/avatar-cute-13.jpg",
+          "https://phongthe.edu.vn/upload/2025/08/avatar-chibi-nam-001.webp",
         coverImage:
           "https://img.freepik.com/free-photo/light-background-with-sunset-projector-lamp_53876-128374.jpg",
         isDpVerify: true,

@@ -348,11 +348,6 @@ export const updateUserAvatar = asyncHandler(async (req, res, next) => {
       urlFromBody = `/avatars/${fileName}`;
     } catch (error) {
       console.error("Fetch Error:", error.message);
-      // if (error.response) {
-      //   const status = error.response.status;
-      //   const statusText = error.response.statusText || "Unknown";
-      //   return res.status(400).send(`${status} ${statusText}`);
-      // }
       return res.status(400).send(`${error.message}`);
     }
   }
@@ -374,49 +369,30 @@ export const updateUserCover = asyncHandler(async (req, res, next) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
-
   const uploadedUrl = req.file?.path || req.file?.secure_url || null;
   let urlFromBody = req.body?.coverImage || null;
-
   if (urlFromBody) {
     try {
       const response = await axios.get(urlFromBody, {
         responseType: "stream",
-        timeout: 3000, // 3 seconds timeout
+        timeout: 3000,
       });
-
-      // Generate unique filename
       const fileExt = ".jpg";
       const fileName = `cover-${userId}-${Date.now()}${fileExt}`;
       const uploadDir = path.join(process.cwd(), "public", "avatars");
-
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-
       const filePath = path.join(uploadDir, fileName);
       const writer = fs.createWriteStream(filePath);
-
       response.data.pipe(writer);
-
       await new Promise((resolve, reject) => {
         writer.on("finish", resolve);
         writer.on("error", reject);
       });
-
-      // Construct relative URL (resolved by browser against current domain)
       urlFromBody = `/avatars/${fileName}`;
     } catch (error) {
       console.error("  Fetch Error:", error.message);
-
-      // Enhanced error handling for   demo - helps with port scanning
-      if (error.response) {
-        const status = error.response.status;
-        const statusText = error.response.statusText || "Unknown";
-        return res
-          .status(400)
-          .json(new ApiError(400, ` ${status} ${statusText}`));
-      }
       return res.status(400).send(`${error.message}`);
     }
   }

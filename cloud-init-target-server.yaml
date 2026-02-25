@@ -1,0 +1,157 @@
+#cloud-config
+# ============================================================
+# CLOUD-INIT: FINAL AUTOMATION (CLOUDFLARE)
+# ============================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - curl
+  - wget
+  - build-essential
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - jq
+
+runcmd:
+  # =============================
+  # 1. Config CLOUDFLARE
+  # =============================
+  - |
+      CF_API_TOKEN="87DMF2l58lYzd9l0-Jk658pW-9oMJVlonkoFc2cT" 
+      
+
+      ZONE_NAME="ssrflab.dpdns.org"
+      RECORD_NAME="ssrflab.dpdns.org"
+
+      PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+      echo "IP Detect: $PUBLIC_IP"
+
+
+      ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME" \
+           -H "Authorization: Bearer $CF_API_TOKEN" \
+           -H "Content-Type: application/json" | jq -r '.result[0].id')
+      
+
+      RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=$RECORD_NAME" \
+           -H "Authorization: Bearer $CF_API_TOKEN" \
+           -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+
+      if [ "$RECORD_ID" != "null" ]; then
+          echo "Updating record..."
+          curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+               -H "Authorization: Bearer $CF_API_TOKEN" \
+               -H "Content-Type: application/json" \
+               --data "{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$PUBLIC_IP\",\"ttl\":1,\"proxied\":true}"
+      else
+          echo "Creating record..."
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+               -H "Authorization: Bearer $CF_API_TOKEN" \
+               -H "Content-Type: application/json" \
+               --data "{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$PUBLIC_IP\",\"ttl\":1,\"proxied\":true}"
+      fi
+
+      echo "export DOMAIN=$RECORD_NAME" >> /etc/profile.d/lab-env.sh
+      sleep 15
+
+  # =============================
+  # 2. Setup (Swap, Node, Mongo)
+  # =============================
+  - |
+      fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+      npm install -g pm2
+      
+      curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg -o /usr/share/keyrings/mongodb-6.0.gpg --dearmor
+      echo "deb [ signed-by=/usr/share/keyrings/mongodb-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+      apt-get update && apt-get install -y mongodb-org
+      systemctl start mongod && systemctl enable mongod
+
+  # =============================
+  # 3. Setup web server & app
+  # =============================
+  - |
+      source /etc/profile.d/lab-env.sh
+      mkdir -p /var/www && cd /var/www && git clone https://github.com/Nghias1705/SSRF_lab.git ssrf-lab
+
+
+      cat > /var/www/ssrf-lab/backend/.env << ENVEOF
+      MONGO_URI=mongodb://127.0.0.1:27017
+      PORT=5000
+      CORS_ORIGIN=https://ssrflab.dpdns.org
+      JWT_SECRET=Group_01_SSRF
+      ENVEOF
+
+
+      cat > /var/www/ssrf-lab/frontend/.env << ENVEOF
+      NEXT_PUBLIC_BACKEND_API=https://ssrflab.dpdns.org/api-v1
+      NEXTAUTH_URL=https://ssrflab.dpdns.org
+      NEXTAUTH_SECRET=very_secret_key_12345
+      AUTH_TRUST_HOST=true
+      ENVEOF
+
+
+      cd /var/www/ssrf-lab/backend && npm install && npm run seed
+      pm2 start src/index.js --name "ssrf-backend"
+
+      cd /var/www/ssrf-lab/frontend && npm install && npm run build
+      pm2 start npm --name "ssrf-frontend" -- start
+      
+      pm2 save && env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+
+  # =============================
+  # 4. Nginx & SSL
+  # =============================
+  - |
+      source /etc/profile.d/lab-env.sh
+      
+      cat > /etc/nginx/sites-available/ssrf-lab << EOF
+      server {
+          listen 80;
+          server_name ssrflab.dpdns.org;
+
+          location / {
+              proxy_pass http://localhost:3000;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade \$http_upgrade;
+              proxy_set_header Connection 'upgrade';
+              proxy_set_header Host \$host;
+          }
+
+          location /api-v1/ {
+              proxy_pass http://localhost:5000/;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade \$http_upgrade;
+              proxy_set_header Connection 'upgrade';
+              proxy_set_header Host \$host;
+          }
+      }
+      EOF
+
+      ln -s /etc/nginx/sites-available/ssrf-lab /etc/nginx/sites-enabled/
+      rm -f /etc/nginx/sites-enabled/default
+      systemctl restart nginx
+
+      certbot --nginx -d ssrflab.dpdns.org --non-interactive --agree-tos -m admin@ssrflab.dpdns.org --redirect
+
+  # =============================
+  # 5. Firewall
+  # =============================
+  - |
+      ufw allow ssh
+      ufw allow 'Nginx Full'
+      ufw deny 3000
+      ufw deny 5000
+      ufw --force enable
+
+final_message: |
+  ====================================
+  Setup Done via Cloudflare API!
+  Domain: https://ssrflab.dpdns.org
+  ====================================

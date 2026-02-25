@@ -1,0 +1,32 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+packages:
+  - curl
+  - build-essential
+
+runcmd:
+  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  - apt-get install -y nodejs && npm install -g pm2
+  - mkdir -p /opt/services
+  - |
+    cat > /opt/services/ports.js << 'JSEOF'
+    const http = require('http');
+    const BIND_IP = process.env.BIND_IP || '0.0.0.0';
+    const ports = [21, 80, 443, 2375, 3000, 5000, 8000, 8443, 9090];
+
+    ports.forEach(port => {
+      http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(`Port ${port} is open`);
+      }).listen(port, BIND_IP, () => console.log(`Listening on ${BIND_IP}:${port}`));
+    });
+    JSEOF
+  - |
+    PRIVATE_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/private/0/ipv4/address)
+    cd /opt/services && BIND_IP=${PRIVATE_IP} pm2 start ports.js --name "ports"
+    pm2 save && env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+    echo "TARGET 2 | IP: ${PRIVATE_IP} | Ports: 21,80,443,2375,3000,5000,8000,8443,9090" > /var/log/target2.log
+
+final_message: "Target 2 ready"
