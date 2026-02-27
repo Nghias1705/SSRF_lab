@@ -1,0 +1,252 @@
+#cloud-config
+# ============================================================
+# CLOUD-INIT: SSRF Lab with domain + HTTPs
+# ============================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - curl
+  - wget
+  - build-essential
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - jq
+
+runcmd:
+  # =============================
+  # 1. Config CLOUDFLARE (DNS + SSL Mode)
+  # =============================
+  - |
+    CF_API_TOKEN="87DMF2l58lYzd9l0-Jk658pW-9oMJVlonkoFc2cT" 
+
+    ZONE_NAME="ssrflab.dpdns.org"
+    RECORD_NAME="ssrflab.dpdns.org"
+
+    PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+    echo "IP Detect: $PUBLIC_IP"
+
+    # Get Zone ID
+    ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME" \
+         -H "Authorization: Bearer $CF_API_TOKEN" \
+         -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+    # Update DNS Record
+    RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=$RECORD_NAME" \
+         -H "Authorization: Bearer $CF_API_TOKEN" \
+         -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+    if [ "$RECORD_ID" != "null" ]; then
+        echo "Updating record..."
+        curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+             -H "Authorization: Bearer $CF_API_TOKEN" \
+             -H "Content-Type: application/json" \
+             --data "{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$PUBLIC_IP\",\"ttl\":1,\"proxied\":true}"
+    else
+        echo "Creating record..."
+        curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+             -H "Authorization: Bearer $CF_API_TOKEN" \
+             -H "Content-Type: application/json" \
+             --data "{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$PUBLIC_IP\",\"ttl\":1,\"proxied\":true}"
+    fi
+
+    # SET SSL MODE TO FULL (STRICT) - Because we have Origin CA Cert
+    echo "Setting SSL mode to Full (Strict)..."
+    curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ssl" \
+         -H "Authorization: Bearer $CF_API_TOKEN" \
+         -H "Content-Type: application/json" \
+         --data '{"value":"full"}'  # "full" implies strict when origin cert is valid
+
+    echo "export DOMAIN=$RECORD_NAME" >> /etc/profile.d/lab-env.sh
+    sleep 15
+
+  # =============================
+  # 2. Setup (Swap, Node, Mongo)
+  # =============================
+  - |
+    fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+    npm install -g pm2
+
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg -o /usr/share/keyrings/mongodb-6.0.gpg --dearmor
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    apt-get update && apt-get install -y mongodb-org
+    systemctl start mongod && systemctl enable mongod
+
+  # =============================
+  # 3. Setup web server & app
+  # =============================
+  - |
+    source /etc/profile.d/lab-env.sh
+    mkdir -p /var/www && cd /var/www && git clone https://github.com/Nghias1705/SSRF_lab.git ssrf-lab
+
+
+    cat > /var/www/ssrf-lab/backend/.env << ENVEOF
+    MONGO_URI=mongodb://127.0.0.1:27017
+    PORT=5000
+    CORS_ORIGIN=https://ssrflab.dpdns.org
+    JWT_SECRET=Group_01_SSRF
+    ENVEOF
+
+
+    cat > /var/www/ssrf-lab/frontend/.env << ENVEOF
+    NEXT_PUBLIC_BACKEND_API=https://ssrflab.dpdns.org/api-v1
+    NEXTAUTH_URL=https://ssrflab.dpdns.org
+    NEXTAUTH_SECRET=very_secret_key_12345
+    AUTH_TRUST_HOST=true
+    ENVEOF
+
+
+    cd /var/www/ssrf-lab/backend && npm install && npm run seed
+    pm2 start src/index.js --name "ssrf-backend"
+
+    cd /var/www/ssrf-lab/frontend && npm install && npm run build
+    pm2 start npm --name "ssrf-frontend" -- start
+
+    pm2 save && env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+
+  # =============================
+  # 4. Nginx & SSL (Cloudflare Origin CA)
+  # =============================
+  - |
+    source /etc/profile.d/lab-env.sh
+
+    # 4.1 Save Cloudflare Origin Certificate
+    cat > /etc/ssl/certs/origin.pem << 'EOF_CERT'
+    -----BEGIN CERTIFICATE-----
+    MIIErjCCA5agAwIBAgIUOF+3nge3avObyBAWkZdfowjE2UowDQYJKoZIhvcNAQEL
+    BQAwgYsxCzAJBgNVBAYTAlVTMRkwFwYDVQQKExBDbG91ZEZsYXJlLCBJbmMuMTQw
+    MgYDVQQLEytDbG91ZEZsYXJlIE9yaWdpbiBTU0wgQ2VydGlmaWNhdGUgQXV0aG9y
+    aXR5MRYwFAYDVQQHEw1TYW4gRnJhbmNpc2NvMRMwEQYDVQQIEwpDYWxpZm9ybmlh
+    MB4XDTI2MDIxMjE2MTYwMFoXDTQxMDIwODE2MTYwMFowYjEZMBcGA1UEChMQQ2xv
+    dWRGbGFyZSwgSW5jLjEdMBsGA1UECxMUQ2xvdWRGbGFyZSBPcmlnaW4gQ0ExJjAk
+    BgNVBAMTHUNsb3VkRmxhcmUgT3JpZ2luIENlcnRpZmljYXRlMIIBIjANBgkqhkiG
+    9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1OnoSI0e9/MxRZTmBCrbM6IOgDToxah0Kdqg
+    KJfsKM4SyDCj0k3V8r4LZvMa9QxBcHEm3P4BfCdNvhOZalfS2autenqPQ3FUkRhB
+    ct/SgXdHWmZX8E56bv0BafMQxOlP8SEMpJP2MDsOtzak20fr+epBk5fTGidGUCF4
+    rCFWtnsOFD3Mroiaiu79GhskT9Wt5av1qC81qlixn3HZIzv23OcwPDtEvWGzch7p
+    C9/8ve1FepJWtctaAoKDwCcVFr3bp6KjMNiLcAZ2OvkJ+zmAGcUol7jYvU+iP0H6
+    LSaCPegwvNnYYh8DnUJd3zialDfrwGmV0/NAhNVkAtTUUDnMwwIDAQABo4IBMDCC
+    ASwwDgYDVR0PAQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcD
+    ATAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBQ/BC/9tZfMPQvn/+cwwxqe9/Nl8jAf
+    BgNVHSMEGDAWgBQk6FNXXXw0QIep65TbuuEWePwppDBABggrBgEFBQcBAQQ0MDIw
+    MAYIKwYBBQUHMAGGJGh0dHA6Ly9vY3NwLmNsb3VkZmxhcmUuY29tL29yaWdpbl9j
+    YTAxBgNVHREEKjAoghMqLnNzcmZsYWIuZHBkbnMub3JnghFzc3JmbGFiLmRwZG5z
+    Lm9yZzA4BgNVHR8EMTAvMC2gK6AphidodHRwOi8vY3JsLmNsb3VkZmxhcmUuY29t
+    L29yaWdpbl9jYS5jcmwwDQYJKoZIhvcNAQELBQADggEBADC5tK06ntoWoIHDb6VU
+    rpz1qm1ZqbY8UV1eXhsVsIaASob6UJjmzsh0/ycGCzjiu/m79Enm8ONe6C+LjMfm
+    z+YvMdFG4HK+3eCGlbqLTg0fPlRQnYeX9+iUPeTYE9RXD7UFKjx1mzwrxJHrbnxq
+    ncOnAzdIGNhWu+JtrKF6Ye0vszcP8aIpO0m1Vz8fanYPdIfq1eu5umfVzukvJgEq
+    tQKTxzBuzhQE9cbBy2c10cKBxF7HzYQD/+D8LPrOp84EMV3v/PaflLyUGBo1II7A
+    y76NPpWoQJAiKhXwjPc1ZhIQRgHzq3nsxpH6kFJirK/QzeEyYRa5hlQbmSwTe9l3
+    /Q8=
+    -----END CERTIFICATE-----
+    EOF_CERT
+
+    # 4.2 Save Cloudflare Origin Private Key
+    cat > /etc/ssl/private/origin.key << 'EOF_KEY'
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDU6ehIjR738zFF
+    lOYEKtszog6ANOjFqHQp2qAol+wozhLIMKPSTdXyvgtm8xr1DEFwcSbc/gF8J02+
+    E5lqV9LZq616eo9DcVSRGEFy39KBd0daZlfwTnpu/QFp8xDE6U/xIQykk/YwOw63
+    NqTbR+v56kGTl9MaJ0ZQIXisIVa2ew4UPcyuiJqK7v0aGyRP1a3lq/WoLzWqWLGf
+    cdkjO/bc5zA8O0S9YbNyHukL3/y97UV6kla1y1oCgoPAJxUWvdunoqMw2ItwBnY6
+    +Qn7OYAZxSiXuNi9T6I/QfotJoI96DC82dhiHwOdQl3fOJqUN+vAaZXT80CE1WQC
+    1NRQOczDAgMBAAECggEAYzFQXxCkF2dNErpCiTmAIyeCcvdzZLbM27z3tcHFq+MJ
+    /AsxH2bU4MDqZf2nlvetOxn0Pav2/CUBgqb16AXffTqO2UtlGEoh2HFA+KhPFbMA
+    4pxgptuhDblAoeA0dVCvRksb7UbjwOeavP+vwVtaFHYvM/hdSMd4aheV9TeZAu0q
+    0foSSwEQh8fxBQ0bqh6KEaxWo/RHRKI8sBDIm7a8qFpYvY6pVOt6FBf9zfqdn2dL
+    Zvh7tjfwHHKSL3hqFJqFJkStEC42Xoj/RhzxRzOTLzWHCady8efOWVgXgJgDWhhT
+    ZahTD3pxc+iYDuiaiVZdZ1jDbyR14KI+5LWNSIpYqQKBgQDzWnLZZM9ypQHYdrLY
+    t3l10ZX0CN9Tjlzm1WBHupy5pbmCmY5+tYpNo37stpjYgw0/ZvU1lxIGnhLF6f7h
+    7UbkyZSH9KXoL7Xp7TdzV4gPRBAt0Vfp1Pkl9bc0tbdSpamEtaMID7aW6c49mQGU
+    lcpOjqTbiluVQmB9Oh6OQ8OUKwKBgQDf+n4kTIqp2MRgB7ByRV9zH+RiWhgrpovA
+    X4xBzmHE6OAe61pGbii+g78bCqgMf1ohA4mWdrWvIeQtFPTG+OnSU0a0BvmOOIbM
+    JHgVFcHYk//+ZCzaHpEVK0y15AjXQ1RHZ+TewNgsheRNfNr8tE5GYSKmCif5fqGY
+    Svc+yGDlyQKBgQC+qagAIZbTGOsYQO+hEicsozfcijMHUSwCgz07Fb+DSI/O/iaB
+    qhSg/a8NIYchY5Q2j6EhCqrJ2oGU5N+Y/YGk8TbZSlnOT8s0a3IdgYANjeMrMrCx
+    ePZ3wkt3FcR7EWZ+np0MTNte4/J9mmp9ktp9sA8EHyPgDrBwjN+x0O/kHwKBgGMX
+    zSU8JAEfIUqnPD5iSOeDTaTh3V26kovq+f/HUmQu77FeSRNt+2LGoQ9SuKTG11ZR
+    3VaPcLRqFyyG4AED8VcXdumBSHnOsnyxCduyQ5ARcqnXIiziZyfpf0fd+rdaV3g8
+    E/slcL7KAgbyXWR+VT84DH9PcP4mM1JQoHDLcGtZAoGAJu9JicjfTPFUY5oiY6v9
+    Xig9FbJmDdohSAvvzENuj/ypnznSH6fjfXGqJPhMW081BeiQaOWq1iJ/0KlXvM27
+    laRtkh8etu++aeNf9Kl6nOEcBOlMUTh7c39V+h9l6g83NIKD2+o92tiAojpLXT1V
+    OryTiLCZKCu0Wm5l7+xQcbo=
+    -----END PRIVATE KEY-----
+    EOF_KEY
+
+    # 4.3 Configure Nginx to use these certs (Full Strict)
+    cat > /etc/nginx/sites-available/ssrf-lab << EOF
+    server {
+        listen 80;
+        server_name ssrflab.dpdns.org;
+        return 301 https://\$host\$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name ssrflab.dpdns.org;
+
+        ssl_certificate /etc/ssl/certs/origin.pem;
+        ssl_certificate_key /etc/ssl/private/origin.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        
+        # Static files (avatars, uploads) -> Backend
+        location /avatars/ {
+            proxy_pass http://localhost:5000/avatars/;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+
+        location /uploads/ {
+            proxy_pass http://localhost:5000/uploads/;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+
+        # API requests -> Backend
+        location /api-v1/ {
+            proxy_pass http://localhost:5000/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host \$host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+
+        # Everything else -> Frontend
+        location / {
+            proxy_pass http://localhost:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host \$host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+    }
+    EOF
+
+    ln -s /etc/nginx/sites-available/ssrf-lab /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+    systemctl restart nginx
+
+  # =============================
+  # 5. Firewall
+  # =============================
+  - |
+    ufw allow ssh
+    ufw allow 'Nginx Full'
+    ufw deny 3000
+    ufw deny 5000
+    ufw --force enable
+
+final_message: |
+  ====================================
+  Setup Done via Cloudflare API!
+  Domain: https://ssrflab.dpdns.org
+  ====================================
