@@ -1,0 +1,143 @@
+#cloud-config
+# ============================================================
+# CLOUD-INIT: DROPLET 1 - WEB SERVER (SSRF Lab)
+# ============================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - curl
+  - wget
+  - build-essential
+
+runcmd:
+  # =============================
+  # 1. Create SWAP FILE 4GB
+  # =============================
+  - |
+    fallocate -l 4G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # =============================
+  # 2. Get Public IP from Metadata Service (DigitalOcean) and log it
+  # =============================
+  - |
+    export PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+    echo "Public IP detected: ${PUBLIC_IP}"
+  # =============================
+  # 3. Install Node.js 22.x & PM2 (dependency for SSRF Lab)
+  # =============================
+  - |
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
+    npm install -g pm2
+
+  # =============================
+  # 4. Install MongoDB 6.0 (dependency for SSRF Lab)
+  # =============================
+  - |
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg -o /usr/share/keyrings/mongodb-6.0.gpg --dearmor
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    apt-get update
+    apt-get install -y mongodb-org
+    systemctl start mongod
+    systemctl enable mongod
+  # =============================
+  # 5. Clone SSRF Lab repository from GitHub
+  # =============================
+  - |
+    mkdir -p /var/www
+    cd /var/www && git clone https://github.com/Nghias1705/SSRF_lab.git ssrf-lab
+  # =============================
+  # 6. Configure Backend .env (Automatically fetch Public IP)
+  # =============================
+  - |
+    PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+    cat > /var/www/ssrf-lab/backend/.env << ENVEOF
+    MONGO_URI=mongodb://127.0.0.1:27017
+    PORT=5000
+    CORS_ORIGIN=http://${PUBLIC_IP}:3000
+    JWT_SECRET=Group_01_SSRF
+    ENVEOF
+  # =============================
+  # 7. Install & Seed Backend
+  # =============================
+  - |
+    cd /var/www/ssrf-lab/backend && npm install
+    cd /var/www/ssrf-lab/backend && npm run seed
+  # =============================
+  # 8. Run Backend with PM2
+  # =============================
+  - cd /var/www/ssrf-lab/backend && pm2 start src/index.js --name "ssrf-backend"
+
+  # =============================
+  # 9. Configure Frontend .env
+  # =============================
+  - |
+    PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+    cat > /var/www/ssrf-lab/frontend/.env << ENVEOF
+    NEXT_PUBLIC_BACKEND_API=http://${PUBLIC_IP}:5000
+    NEXTAUTH_URL=http://${PUBLIC_IP}:3000
+    NEXTAUTH_SECRET=very_secret_key_12345
+    AUTH_TRUST_HOST=true
+    GOOGLE_CLIENT_ID=dummy-id
+    GOOGLE_CLIENT_SECRET=dummy-secret
+    ENVEOF
+
+  # =============================
+  # 10. Install & Build Frontend
+  # =============================
+  - |
+    cd /var/www/ssrf-lab/frontend && npm install
+    cd /var/www/ssrf-lab/frontend && npm run build
+
+  # =============================
+  # 11. Run Frontend with PM2
+  # =============================
+  - cd /var/www/ssrf-lab/frontend && pm2 start npm --name "ssrf-frontend" -- start
+
+  # =============================
+  # 12. Save PM2 configuration to auto-start on reboot
+  # =============================
+  - |
+    pm2 save
+    env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+
+  # =============================
+  # 13. Configure UFW Firewall
+  # =============================
+  - |
+    ufw allow ssh
+    ufw allow 80
+    ufw allow 3000
+    ufw allow 5000
+    ufw --force enable
+
+  # =============================
+  # 14. Log completion
+
+  # =============================
+  - |
+    PUBLIC_IP=$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)
+    echo "============================================" >> /var/log/ssrf-lab-setup.log
+    echo "SSRF Lab Web Server - Setup Complete!" >> /var/log/ssrf-lab-setup.log
+    echo "Date: $(date)" >> /var/log/ssrf-lab-setup.log
+    echo "Public IP: ${PUBLIC_IP}" >> /var/log/ssrf-lab-setup.log
+    echo "Frontend: http://${PUBLIC_IP}:3000" >> /var/log/ssrf-lab-setup.log
+    echo "Backend:  http://${PUBLIC_IP}:5000" >> /var/log/ssrf-lab-setup.log
+    echo "" >> /var/log/ssrf-lab-setup.log
+    echo "Login Credentials:" >> /var/log/ssrf-lab-setup.log
+    echo "  Email: nghiatranvan@gmail.com" >> /var/log/ssrf-lab-setup.log
+    echo "  Password: pass1234" >> /var/log/ssrf-lab-setup.log
+    echo "============================================" >> /var/log/ssrf-lab-setup.log
+
+final_message: |
+  ====================================
+  SSRF Lab Web Server - Cloud-Init Done!
+  Check /var/log/ssrf-lab-setup.log for details.
+  Check cloud-init logs: /var/log/cloud-init-output.log
+  ====================================
