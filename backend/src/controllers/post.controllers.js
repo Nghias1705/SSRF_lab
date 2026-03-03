@@ -34,63 +34,9 @@ export const createPost = asyncHandler(async (req, res, next) => {
     const uploadedImageUrl = req.file?.path || req.file?.secure_url || null;
     let image = uploadedImageUrl;
 
-    // SSRF VULNERABILITY: Fetch the URL provided by the user
+    // If no uploaded file, use the URL directly (no server-side fetch)
     if (!image && req.body.image) {
-      try {
-        const targetUrl = req.body.image;
-        console.log(`Fetching URL: ${targetUrl}`);
-        
-        // VULNERABLE CODE: requesting arbitrary URL from server side
-        const response = await axios.get(targetUrl, { 
-          responseType: 'arraybuffer',
-          timeout: 5000 // 5s timeout
-        });
-
-        // Generate filename and save locally (Option B)
-        // FORCE .jpg extension even if content is text (Simulate Polyglot/Misconfiguration)
-        const timestamp = Date.now();
-        // const extension = response.headers['content-type']?.split('/')[1] || 'bin'; 
-        const extension = 'jpg'; // Vulnerable Logic: Trusting it is an image or forcing it
-        const filename = `ssrf_${timestamp}.${extension}`;
-        
-        // Ensure directory exists
-        const uploadDir = path.join(__dirname, '../../public/uploads'); 
-        // NOTE: __dirname is src/controllers, so ../../public/uploads targets backend/public/uploads
-        if (!fs.existsSync(uploadDir)){
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        const filePath = path.join(uploadDir, filename);
-        fs.writeFileSync(filePath, response.data);
-        
-        console.log(`File saved to: ${filePath}`);
-
-        // Set image URL to the local static path
-        // Assuming server serves 'public' folder at root
-        image = `/uploads/${filename}`;
-        
-      } catch (error) {
-        console.error(`  Error fetching URL: ${error.message}`);
-        
-        // Enhanced error handling for SSRF demo - leak info about internal network
-        let info = '';
-        if (error.response) {
-          info = `Target responded: HTTP ${error.response.status} ${error.response.statusText || 'Unknown'} - Port OPEN`;
-        } else if (error.code === 'ECONNREFUSED') {
-          info = `Connection refused - Port CLOSED`;
-        } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-          info = `Connection timeout - Port FILTERED`;
-        } else if (error.code === 'ENOTFOUND') {
-          info = `DNS lookup failed - Host not found`;
-        } else if (error.code === 'ENETUNREACH' || error.code === 'EHOSTUNREACH') {
-          info = `Network/Host unreachable`;
-        } else {
-          info = `Fetch failed: ${error.message} (${error.code || 'N/A'})`;
-        }
-        
-        // Store SSRF result as image placeholder for demo purposes
-        image = `data:text/plain;base64,${Buffer.from(info).toString('base64')}`;
-      }
+      image = req.body.image;
     }
 
     // Create post object with basic fields
@@ -132,6 +78,7 @@ export const createPost = asyncHandler(async (req, res, next) => {
 
     res.status(201).json(new ApiResponse(201, 'Post created successfully', populatedPost));
   } catch (error) {
+    console.error('Failed to create post:', error);
     next(new ApiError(500, 'Failed to create post'));
   }
 });
